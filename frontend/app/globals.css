@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #1a2e4a;
+  --teal: #0d7377;
+}
+
+body {
+  background: #f0f4f8;
+  color: #1a2e4a;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+  }
+  .metric-card {
+    @apply card flex flex-col gap-1;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .btn-primary {
+    @apply bg-teal text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors;
+  }
+  .tab-btn-active {
+    @apply tab-btn bg-navy text-white;
+  }
+  .tab-btn-inactive {
+    @apply tab-btn text-gray-600 hover:bg-gray-100;
+  }
+}

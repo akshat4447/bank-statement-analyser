@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: bank-statement-analyser-api
+    env: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: REPORTS_DIR
+        value: /tmp/reports
+      - key: DATABASE_URL
+        value: sqlite:////tmp/bank_analyser.db
+      - key: ALLOWED_ORIGINS
+        value: https://your-app.netlify.app,http://localhost:3000
+    healthCheckPath: /health
