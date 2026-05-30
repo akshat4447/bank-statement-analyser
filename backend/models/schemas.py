@@ -121,8 +121,8 @@ class AnalyticsResult(BaseModel):
 
 class QACheck(BaseModel):
     check_name: str
-    passed: bool
-    confidence: float = Field(ge=0, le=100)
+    passed: Optional[bool] = False
+    confidence: float = Field(ge=0, le=100, default=0.0)
     expected: Optional[str] = None
     actual: Optional[str] = None
     note: Optional[str] = None

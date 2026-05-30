@@ -205,9 +205,9 @@ Please validate extraction accuracy, categorization quality, and analytics corre
         data = tool_use_block.input
         for chk in data.get("checks", []):
             ai_checks.append(QACheck(
-                check_name=chk["check_name"],
-                passed=chk["passed"],
-                confidence=chk["confidence"],
+                check_name=chk.get("check_name", "Unknown Check"),
+                passed=bool(chk.get("passed", False)),
+                confidence=float(chk.get("confidence", 0.0)),
                 expected=chk.get("expected"),
                 actual=chk.get("actual"),
                 note=chk.get("note"),
