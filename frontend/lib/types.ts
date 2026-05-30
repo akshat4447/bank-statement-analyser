@@ -3,7 +3,7 @@ export type TransactionCategory =
   | "Food & Grocery" | "Travel & Transport" | "Entertainment"
   | "Insurance" | "Investments" | "Medical" | "Shopping"
   | "Education" | "Cash Withdrawal/Deposit" | "Transfer"
-  | "Bounce/Return" | "Other";
+  | "Bounce/Return" | "Other" | "Gambling/High-Risk";
 
 export interface Transaction {
   date: string;
@@ -56,6 +56,38 @@ export interface RiskFlag {
   evidence?: string;
 }
 
+export interface StatementQuality {
+  total_rows_extracted: number;
+  missing_uncertain_rows: number;
+  ocr_confidence: number;
+  balance_continuity_pass_rate: number;
+  duplicate_rows_detected: number;
+  overall_quality_score: number;
+  grade: string;
+}
+
+export interface UnderwriterRecommendation {
+  verdict: "APPROVE" | "REVIEW" | "REJECT";
+  verdict_color: "green" | "amber" | "red";
+  suggested_loan_amount: number;
+  suggested_emi_capacity: number;
+  key_reasons: string[];
+  manual_review_triggers: string[];
+  confidence: number;
+}
+
+export interface LoanAffordability {
+  proposed_emi: number;
+  new_foir: number;
+  current_foir?: number;
+  is_affordable: boolean;
+  verdict: string;
+  stress_10pct: string;
+  stress_20pct: string;
+  stress_30pct: string;
+  max_safe_emi: number;
+}
+
 export interface CreditworthinessMetrics {
   bsa_score: number;
   foir?: number;
@@ -67,6 +99,11 @@ export interface CreditworthinessMetrics {
   max_eligible_emi?: number;
   risk_category: "LOW" | "MEDIUM" | "HIGH" | "VERY HIGH";
   risk_flags: RiskFlag[];
+  score_income_stability: number;
+  score_cash_flow: number;
+  score_balance_behavior: number;
+  score_debt_burden: number;
+  score_risk_events: number;
 }
 
 export interface SpendingCategory {
@@ -107,12 +144,17 @@ export interface AnalyticsResult {
   merchant_breakdown: MerchantSpend[];
   income_sources: IncomeSource[];
   upi_transaction_percentage: number;
+  savings_rate: number;
+  spend_to_income_ratio: number;
   creditworthiness: CreditworthinessMetrics;
+  underwriter?: UnderwriterRecommendation;
+  statement_quality?: StatementQuality;
   salary_transactions: Transaction[];
   emi_transactions: Transaction[];
   bounce_transactions: Transaction[];
   suspicious_transactions: Transaction[];
   recurring_transactions: Transaction[];
+  gambling_transactions: Transaction[];
 }
 
 export interface QACheck {
@@ -132,6 +174,7 @@ export interface QAValidationResult {
   checks: QACheck[];
   issues_found: string[];
   data_quality_grade: string;
+  manual_review_required: boolean;
   validated_at: string;
 }
 

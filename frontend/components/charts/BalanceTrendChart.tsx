@@ -35,15 +35,15 @@ export default function BalanceTrendChart({ data }: Props) {
             <stop offset="95%" stopColor="#0d7377" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e2d45" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={formatINRShort} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <Tooltip content={<CustomTooltip />} />
-        <ReferenceLine y={0} stroke="#e74c3c" strokeDasharray="4 4" strokeWidth={1} />
+        <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1} />
         <Area
           type="monotone"
           dataKey="avg"
-          stroke="#0d7377"
+          stroke="#00d4aa"
           strokeWidth={2.5}
           fill="url(#balGrad)"
           dot={{ r: 4, fill: "#0d7377", strokeWidth: 2, stroke: "white" }}
@@ -56,7 +56,7 @@ export default function BalanceTrendChart({ data }: Props) {
         <Line
           type="monotone"
           dataKey="min"
-          stroke="#e74c3c"
+          stroke="#ef4444"
           strokeWidth={1.5}
           strokeDasharray="5 5"
           dot={false}

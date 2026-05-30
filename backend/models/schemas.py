@@ -26,6 +26,7 @@ class TransactionCategory(str, Enum):
     TRANSFER = "Transfer"
     OTHER = "Other"
     BOUNCE = "Bounce/Return"
+    GAMBLING = "Gambling/High-Risk"
 
 
 class Transaction(BaseModel):
@@ -80,6 +81,38 @@ class RiskFlag(BaseModel):
     evidence: Optional[str] = None
 
 
+class StatementQuality(BaseModel):
+    total_rows_extracted: int
+    missing_uncertain_rows: int
+    ocr_confidence: float = Field(ge=0, le=100)
+    balance_continuity_pass_rate: float = Field(ge=0, le=100)
+    duplicate_rows_detected: int = 0
+    overall_quality_score: float = Field(ge=0, le=100)
+    grade: str  # A/B/C/D/F
+
+
+class UnderwriterRecommendation(BaseModel):
+    verdict: str  # APPROVE / REVIEW / REJECT
+    verdict_color: str  # green / amber / red
+    suggested_loan_amount: float
+    suggested_emi_capacity: float
+    key_reasons: List[str]
+    manual_review_triggers: List[str]
+    confidence: float = Field(ge=0, le=100)
+
+
+class LoanAffordability(BaseModel):
+    proposed_emi: float
+    new_foir: float
+    current_foir: Optional[float]
+    is_affordable: bool
+    verdict: str
+    stress_10pct: str  # verdict if income drops 10%
+    stress_20pct: str
+    stress_30pct: str
+    max_safe_emi: float
+
+
 class CreditworthinessMetrics(BaseModel):
     bsa_score: float = Field(ge=0, le=100)
     foir: Optional[float] = None
@@ -91,6 +124,12 @@ class CreditworthinessMetrics(BaseModel):
     max_eligible_emi: Optional[float] = None
     risk_category: str  # LOW / MEDIUM / HIGH / VERY HIGH
     risk_flags: List[RiskFlag] = []
+    # Score component breakdown
+    score_income_stability: float = 0
+    score_cash_flow: float = 0
+    score_balance_behavior: float = 0
+    score_debt_burden: float = 0
+    score_risk_events: float = 0
 
 
 class SpendingCategory(BaseModel):
@@ -112,7 +151,7 @@ class IncomeSource(BaseModel):
     total_amount: float
     transaction_count: int
     is_verified_salary: bool
-    flag: Optional[str] = None  # e.g. "P2P transfer — unverified income"
+    flag: Optional[str] = None
 
 
 class AnalyticsResult(BaseModel):
@@ -124,7 +163,6 @@ class AnalyticsResult(BaseModel):
     max_balance: float
     total_transactions: int
     analysis_period_months: int
-    # Actual dates derived from transaction data (not PDF header)
     actual_period_from: Optional[str] = None
     actual_period_to: Optional[str] = None
     monthly_stats: List[MonthlyStats]
@@ -132,12 +170,17 @@ class AnalyticsResult(BaseModel):
     merchant_breakdown: List[MerchantSpend] = []
     income_sources: List[IncomeSource] = []
     upi_transaction_percentage: float = 0.0
+    savings_rate: float = 0.0
+    spend_to_income_ratio: float = 0.0
     creditworthiness: CreditworthinessMetrics
+    underwriter: Optional[UnderwriterRecommendation] = None
+    statement_quality: Optional[StatementQuality] = None
     salary_transactions: List[Transaction] = []
     emi_transactions: List[Transaction] = []
     bounce_transactions: List[Transaction] = []
     suspicious_transactions: List[Transaction] = []
     recurring_transactions: List[Transaction] = []
+    gambling_transactions: List[Transaction] = []
 
 
 class QACheck(BaseModel):
@@ -157,6 +200,7 @@ class QAValidationResult(BaseModel):
     checks: List[QACheck]
     issues_found: List[str]
     data_quality_grade: str  # A / B / C / D / F
+    manual_review_required: bool = False
     validated_at: datetime = Field(default_factory=datetime.utcnow)
 
 

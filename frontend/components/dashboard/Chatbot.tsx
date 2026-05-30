@@ -55,19 +55,20 @@ export default function Chatbot({ analysisId }: Props) {
   };
 
   return (
-    <div className="card flex flex-col h-[560px]">
+    <div className="card flex flex-col h-[580px]">
       {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-        <div className="w-9 h-9 bg-teal rounded-xl flex items-center justify-center">
-          <Bot className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-3 pb-4 border-b border-[#1e2d45]">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: "linear-gradient(135deg, rgba(0,212,170,0.2) 0%, rgba(59,130,246,0.2) 100%)", border: "1px solid rgba(0,212,170,0.3)" }}>
+          <Bot className="w-5 h-5 text-[#00d4aa]" />
         </div>
         <div>
-          <p className="font-semibold text-navy">Financial AI Assistant</p>
-          <p className="text-xs text-gray-400">Powered by Claude · Context: your analytics</p>
+          <p className="font-semibold text-slate-200">Financial AI Analyst</p>
+          <p className="text-xs text-slate-500">Contextual analysis · Ask anything about this statement</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-          <span className="text-xs text-gray-400">Online</span>
+          <span className="w-2 h-2 bg-[#00d4aa] rounded-full animate-pulse" />
+          <span className="text-xs text-slate-500">Ready</span>
         </div>
       </div>
 
@@ -76,16 +77,16 @@ export default function Chatbot({ analysisId }: Props) {
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
             <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-              msg.role === "user" ? "bg-navy" : "bg-teal"
+              msg.role === "user" ? "bg-[#1e2d45]" : "bg-[rgba(0,212,170,0.15)]"
             }`}>
               {msg.role === "user"
-                ? <User className="w-3.5 h-3.5 text-white" />
-                : <Bot className="w-3.5 h-3.5 text-white" />}
+                ? <User className="w-3.5 h-3.5 text-slate-400" />
+                : <Bot className="w-3.5 h-3.5 text-[#00d4aa]" />}
             </div>
             <div className={`max-w-[82%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
               msg.role === "user"
-                ? "bg-navy text-white rounded-tr-sm"
-                : "bg-gray-50 text-navy border border-gray-100 rounded-tl-sm"
+                ? "bg-[#1e2d45] text-slate-200 rounded-tr-sm"
+                : "bg-[#111827] text-slate-300 border border-[#1e2d45] rounded-tl-sm"
             }`}>
               {msg.content}
             </div>
@@ -93,29 +94,25 @@ export default function Chatbot({ analysisId }: Props) {
         ))}
         {loading && (
           <div className="flex gap-3">
-            <div className="w-7 h-7 rounded-full bg-teal flex items-center justify-center flex-shrink-0">
-              <Bot className="w-3.5 h-3.5 text-white" />
+            <div className="w-7 h-7 rounded-full bg-[rgba(0,212,170,0.15)] flex items-center justify-center flex-shrink-0">
+              <Bot className="w-3.5 h-3.5 text-[#00d4aa]" />
             </div>
-            <div className="bg-gray-50 border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-sm">
-              <Loader2 className="w-4 h-4 animate-spin text-teal" />
+            <div className="bg-[#111827] border border-[#1e2d45] px-4 py-3 rounded-2xl rounded-tl-sm">
+              <Loader2 className="w-4 h-4 animate-spin text-[#00d4aa]" />
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Suggested chips — shown when no user messages yet */}
+      {/* Suggested chips */}
       {messages.length <= 1 && (
         <div className="pb-3">
-          <p className="text-xs text-gray-400 mb-2">Suggested questions:</p>
+          <p className="text-xs text-slate-600 mb-2">Suggested questions:</p>
           <div className="flex flex-wrap gap-2">
             {DEFAULT_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => send(chip)}
-                disabled={loading}
-                className="text-xs px-3 py-1.5 rounded-full bg-teal/10 text-teal border border-teal/20 hover:bg-teal/20 transition-colors disabled:opacity-50"
-              >
+              <button key={chip} onClick={() => send(chip)} disabled={loading}
+                className="text-xs px-3 py-1.5 rounded-full border border-[#1e2d45] text-slate-400 hover:border-[#00d4aa] hover:text-[#00d4aa] transition-all disabled:opacity-50">
                 {chip}
               </button>
             ))}
@@ -126,20 +123,14 @@ export default function Chatbot({ analysisId }: Props) {
       {/* Input */}
       <div className="pt-3 border-t border-gray-100">
         <div className="flex gap-2">
-          <input
-            type="text"
-            value={input}
+          <input type="text" value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send(input)}
-            placeholder="Ask about your finances..."
+            placeholder="Ask about income, risk, eligibility..."
             disabled={loading}
-            className="flex-1 text-sm px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal/30 disabled:opacity-50"
-          />
-          <button
-            onClick={() => send(input)}
-            disabled={!input.trim() || loading}
-            className="btn-primary !px-3 !py-2.5 rounded-xl"
-          >
+            className="input-dark flex-1" />
+          <button onClick={() => send(input)} disabled={!input.trim() || loading}
+            className="btn-primary !px-3 !py-2.5 flex items-center justify-center">
             <Send className="w-4 h-4" />
           </button>
         </div>

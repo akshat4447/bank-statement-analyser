@@ -119,14 +119,15 @@ Input format: index|merchant_name|CR(incoming money) or DR(outgoing money)
 
 Rules:
 - "Transfer" = generic P2P UPI payment to a PERSON (individual name, phone number)
-- "Salary" = ONLY use if clearly from a company/employer via NEFT, never for person-to-person UPI
+- "Salary" = ONLY if clearly from a company/employer via NEFT, never for person-to-person UPI
+- "Gambling/High-Risk" = Dream11, MPL, fantasy sports, poker, casino, crypto exchanges (WazirX, Binance, CoinDCX), Winzo, Adda52
 - Food & Grocery = Swiggy, Zomato, Blinkit, Zepto, restaurants, cafes, food shops
 - Travel & Transport = Ola, Uber, Rapido, IRCTC, airlines, petrol, fuel stations
 - Shopping = Amazon, Flipkart, Myntra, Meesho, ecommerce
-- Entertainment = Netflix, Spotify, BookMyShow, cinemas
+- Entertainment = Netflix, Spotify, BookMyShow, cinemas (NOT fantasy/gambling apps)
 - Utilities = electricity, water, gas, internet, mobile recharge
 - EMI/Loan Repayment = EMI, NACH, loan repayment
-- Investments = mutual fund, SIP, Zerodha, Groww, stocks
+- Investments = mutual fund, SIP, Zerodha, Groww, stocks (NOT crypto)
 - Medical = pharmacy, hospital, clinic, medicine
 - Education = school/college fees, Byju's, Unacademy, Udemy
 - Bounce/Return = bounced cheque, returned payment
@@ -134,7 +135,7 @@ Rules:
 
 Categories: Salary, EMI/Loan Repayment, Rent, Utilities, Food & Grocery, Travel & Transport,
 Entertainment, Insurance, Investments, Medical, Shopping, Education,
-Cash Withdrawal/Deposit, Transfer, Bounce/Return, Other
+Cash Withdrawal/Deposit, Transfer, Bounce/Return, Gambling/High-Risk, Other
 
 Transactions:
 {batch_text}

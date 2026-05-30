@@ -4,22 +4,23 @@ import { Transaction, TransactionCategory } from "@/lib/types";
 import { Search, ChevronUp, ChevronDown } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "Salary": "bg-green-100 text-green-700",
-  "EMI/Loan Repayment": "bg-red-100 text-red-700",
-  "Rent": "bg-purple-100 text-purple-700",
-  "Utilities": "bg-blue-100 text-blue-700",
-  "Food & Grocery": "bg-orange-100 text-orange-700",
-  "Travel & Transport": "bg-cyan-100 text-cyan-700",
-  "Entertainment": "bg-pink-100 text-pink-700",
-  "Insurance": "bg-indigo-100 text-indigo-700",
-  "Investments": "bg-emerald-100 text-emerald-700",
-  "Medical": "bg-rose-100 text-rose-700",
-  "Shopping": "bg-amber-100 text-amber-700",
-  "Education": "bg-sky-100 text-sky-700",
-  "Cash Withdrawal/Deposit": "bg-gray-100 text-gray-700",
-  "Transfer": "bg-slate-100 text-slate-700",
-  "Bounce/Return": "bg-red-200 text-red-800",
-  "Other": "bg-gray-100 text-gray-500",
+  "Salary": "bg-[rgba(34,197,94,0.12)] text-green-400 border border-[rgba(34,197,94,0.2)]",
+  "EMI/Loan Repayment": "bg-[rgba(239,68,68,0.1)] text-red-400 border border-[rgba(239,68,68,0.2)]",
+  "Rent": "bg-[rgba(168,85,247,0.1)] text-purple-400 border border-[rgba(168,85,247,0.2)]",
+  "Utilities": "bg-[rgba(59,130,246,0.1)] text-blue-400 border border-[rgba(59,130,246,0.2)]",
+  "Food & Grocery": "bg-[rgba(249,115,22,0.1)] text-orange-400 border border-[rgba(249,115,22,0.2)]",
+  "Travel & Transport": "bg-[rgba(6,182,212,0.1)] text-cyan-400 border border-[rgba(6,182,212,0.2)]",
+  "Entertainment": "bg-[rgba(236,72,153,0.1)] text-pink-400 border border-[rgba(236,72,153,0.2)]",
+  "Insurance": "bg-[rgba(99,102,241,0.1)] text-indigo-400 border border-[rgba(99,102,241,0.2)]",
+  "Investments": "bg-[rgba(16,185,129,0.1)] text-emerald-400 border border-[rgba(16,185,129,0.2)]",
+  "Medical": "bg-[rgba(244,63,94,0.1)] text-rose-400 border border-[rgba(244,63,94,0.2)]",
+  "Shopping": "bg-[rgba(245,158,11,0.1)] text-amber-400 border border-[rgba(245,158,11,0.2)]",
+  "Education": "bg-[rgba(14,165,233,0.1)] text-sky-400 border border-[rgba(14,165,233,0.2)]",
+  "Cash Withdrawal/Deposit": "bg-[rgba(100,116,139,0.1)] text-slate-400 border border-[rgba(100,116,139,0.2)]",
+  "Transfer": "bg-[rgba(71,85,105,0.1)] text-slate-400 border border-[rgba(71,85,105,0.2)]",
+  "Bounce/Return": "bg-[rgba(239,68,68,0.15)] text-red-400 border border-red-500/30",
+  "Gambling/High-Risk": "bg-[rgba(239,68,68,0.2)] text-red-400 border border-red-500/40",
+  "Other": "bg-[rgba(71,85,105,0.08)] text-slate-500 border border-[rgba(71,85,105,0.15)]",
 };
 
 interface Props { transactions: Transaction[] }
@@ -55,90 +56,68 @@ export default function TransactionTable({ transactions }: Props) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search narration, date..."
-            value={search}
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input type="text" placeholder="Search narration or date..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal/30"
-          />
+            className="input-dark pl-9" />
         </div>
-        <select
-          value={categoryFilter}
-          onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none bg-white"
-        >
-          {categories.map((c) => <option key={c}>{c}</option>)}
+        <select value={categoryFilter} onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+          className="input-dark w-auto">
+          {categories.map((c) => <option key={c} className="bg-[#111827]">{c}</option>)}
         </select>
-        <select
-          value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none bg-white"
-        >
-          {["All", "Credit", "Debit"].map((t) => <option key={t}>{t}</option>)}
+        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
+          className="input-dark w-auto">
+          {["All", "Credit", "Debit"].map((t) => <option key={t} className="bg-[#111827]">{t}</option>)}
         </select>
-        <span className="text-sm text-gray-400 self-center ml-auto">
-          {filtered.length} of {transactions.length} transactions
+        <span className="text-xs text-slate-500 self-center ml-auto">
+          {filtered.length} / {transactions.length} rows
         </span>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-gray-100">
+      <div className="overflow-x-auto rounded-xl border border-[#1e2d45]">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-navy text-white text-xs uppercase tracking-wide">
+            <tr className="bg-[#111827] text-xs uppercase tracking-wide border-b border-[#1e2d45]">
               {["Date", "Narration", "Debit", "Credit", "Balance", "Category", "Flags"].map((h) => (
-                <th key={h} className="px-4 py-3 text-left font-medium first:rounded-tl-xl last:rounded-tr-xl">
-                  {h}
-                </th>
+                <th key={h} className="px-4 py-3 text-left font-medium text-slate-500">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visible.map((t, i) => (
-              <tr
-                key={i}
-                className={`border-b border-gray-50 hover:bg-gray-50 transition-colors
-                  ${t.is_bounce ? "bg-red-50" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-              >
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-mono text-xs">{t.date}</td>
+              <tr key={i} className={`border-b border-[#1e2d45] last:border-0 hover:bg-[#111827] transition-colors ${t.is_bounce ? "bg-red-500/5" : ""}`}>
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap font-mono text-xs">{t.date}</td>
                 <td className="px-4 py-3 max-w-[280px]">
-                  <span className="line-clamp-2 text-navy">{t.narration}</span>
+                  <span className="line-clamp-2 text-slate-300">{t.narration}</span>
                 </td>
-                <td className="px-4 py-3 text-right font-medium text-red-600 whitespace-nowrap">
-                  {t.debit ? `₹${t.debit.toLocaleString("en-IN")}` : "—"}
+                <td className="px-4 py-3 text-right font-semibold text-red-400 whitespace-nowrap">
+                  {t.debit ? `₹${t.debit.toLocaleString("en-IN")}` : <span className="text-slate-700">—</span>}
                 </td>
-                <td className="px-4 py-3 text-right font-medium text-green-600 whitespace-nowrap">
-                  {t.credit ? `₹${t.credit.toLocaleString("en-IN")}` : "—"}
+                <td className="px-4 py-3 text-right font-semibold text-[#00d4aa] whitespace-nowrap">
+                  {t.credit ? `₹${t.credit.toLocaleString("en-IN")}` : <span className="text-slate-700">—</span>}
                 </td>
-                <td className="px-4 py-3 text-right text-gray-600 whitespace-nowrap">
+                <td className="px-4 py-3 text-right text-slate-400 whitespace-nowrap text-xs">
                   {t.balance ? `₹${t.balance.toLocaleString("en-IN")}` : "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`badge text-xs ${CATEGORY_COLORS[t.category || "Other"] || "bg-gray-100 text-gray-600"}`}>
-                    {t.category || "Other"}
-                  </span>
+                  <span className={`badge text-xs ${CATEGORY_COLORS[t.category || "Other"]}`}>{t.category || "Other"}</span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1 flex-wrap">
-                    {t.is_salary && <span className="badge bg-green-100 text-green-700">SALARY</span>}
-                    {t.is_emi && <span className="badge bg-red-100 text-red-700">EMI</span>}
-                    {t.is_bounce && <span className="badge bg-red-200 text-red-800">BOUNCE</span>}
-                    {t.is_suspicious && <span className="badge bg-amber-100 text-amber-700">⚠ RISK</span>}
-                    {t.is_recurring && <span className="badge bg-blue-100 text-blue-700">RECURRING</span>}
+                    {t.is_salary && <span className="badge-green text-xs">SALARY</span>}
+                    {t.is_emi && <span className="badge-red text-xs">EMI</span>}
+                    {t.is_bounce && <span className="badge-red text-xs">BOUNCE</span>}
+                    {t.is_suspicious && <span className="badge-amber text-xs">⚠ RISK</span>}
+                    {t.is_recurring && <span className="badge-blue text-xs">RECUR</span>}
                   </div>
                 </td>
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
-                  No transactions match your filters.
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-600">No transactions match your filters.</td></tr>
             )}
           </tbody>
         </table>

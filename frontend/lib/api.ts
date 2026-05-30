@@ -36,6 +36,19 @@ export async function sendChatMessage(
   return res.json();
 }
 
+export async function loanSimulator(
+  analysisId: string,
+  proposedEmi: number
+): Promise<import("./types").LoanAffordability> {
+  const res = await fetch(`${BASE_URL}/api/analysis/${analysisId}/loan-simulator`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proposed_emi: proposedEmi }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export function getPdfUrl(id: string) {
   return `${BASE_URL}/api/report/${id}/pdf`;
 }

@@ -35,21 +35,21 @@ export default function IncomeExpenseChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <ComposedChart data={chartData} barGap={6} barSize={20}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e2d45" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={formatINRShort} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f8fafc" }} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Bar
           dataKey="Salary"
-          fill="#27ae60"
+          fill="#22c55e"
           radius={[4, 4, 0, 0]}
           isAnimationActive={true}
           animationDuration={800}
         />
         <Bar
           dataKey="EMI"
-          fill="#e74c3c"
+          fill="#ef4444"
           radius={[4, 4, 0, 0]}
           isAnimationActive={true}
           animationDuration={800}
@@ -57,7 +57,7 @@ export default function IncomeExpenseChart({ data }: Props) {
         <Line
           type="monotone"
           dataKey="Net Flow"
-          stroke="#1a2e4a"
+          stroke="#3b82f6"
           strokeWidth={2.5}
           dot={{ r: 4, fill: "#1a2e4a" }}
           isAnimationActive={true}

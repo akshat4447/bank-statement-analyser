@@ -3,35 +3,133 @@
 @tailwind utilities;
 
 :root {
-  --navy: #1a2e4a;
-  --teal: #0d7377;
+  --navy: #0a0f1e;
+  --teal: #00d4aa;
 }
 
+* { box-sizing: border-box; }
+
 body {
-  background: #f0f4f8;
-  color: #1a2e4a;
+  background: #0a0f1e;
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0d1424; }
+::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3f60; }
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+    @apply bg-[#0d1424] rounded-2xl border border-[#1e2d45] p-5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
   }
+
+  .card-glow {
+    @apply card;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04), 0 0 30px rgba(0,212,170,0.05);
+  }
+
   .metric-card {
     @apply card flex flex-col gap-1;
   }
+
+  .glass {
+    background: rgba(13, 20, 36, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
+
+  .badge-teal {
+    @apply badge bg-[rgba(0,212,170,0.1)] text-[#00d4aa] border border-[rgba(0,212,170,0.2)];
+  }
+
+  .badge-red {
+    @apply badge bg-[rgba(239,68,68,0.1)] text-red-400 border border-[rgba(239,68,68,0.2)];
+  }
+
+  .badge-amber {
+    @apply badge bg-[rgba(245,158,11,0.1)] text-amber-400 border border-[rgba(245,158,11,0.2)];
+  }
+
+  .badge-blue {
+    @apply badge bg-[rgba(59,130,246,0.1)] text-blue-400 border border-[rgba(59,130,246,0.2)];
+  }
+
+  .badge-green {
+    @apply badge bg-[rgba(34,197,94,0.1)] text-green-400 border border-[rgba(34,197,94,0.2)];
+  }
+
   .btn-primary {
-    @apply bg-teal text-white font-semibold px-5 py-2.5 rounded-xl hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply font-semibold px-5 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #00d4aa 0%, #0ea5e9 100%);
+    color: #0a0f1e;
   }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 20px rgba(0,212,170,0.3);
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-sm font-medium rounded-xl border border-[#1e2d45] text-slate-300 hover:border-[#00d4aa] hover:text-[#00d4aa] transition-all;
+  }
+
   .tab-btn {
-    @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors;
+    @apply px-4 py-2 text-sm font-medium rounded-xl transition-all;
   }
+
   .tab-btn-active {
-    @apply tab-btn bg-navy text-white;
+    @apply tab-btn text-[#0a0f1e] font-semibold;
+    background: linear-gradient(135deg, #00d4aa 0%, #0ea5e9 100%);
+    box-shadow: 0 0 15px rgba(0,212,170,0.2);
   }
+
   .tab-btn-inactive {
-    @apply tab-btn text-gray-600 hover:bg-gray-100;
+    @apply tab-btn text-slate-400 hover:text-slate-200 hover:bg-[#1e2d45];
   }
+
+  .stat-label {
+    @apply text-xs font-medium text-slate-500 uppercase tracking-wider;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold text-slate-100;
+  }
+
+  .section-title {
+    @apply text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #00d4aa 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .divider {
+    @apply border-t border-[#1e2d45] my-4;
+  }
+
+  .input-dark {
+    @apply bg-[#111827] border border-[#1e2d45] rounded-xl px-4 py-2.5 text-slate-200 text-sm focus:outline-none focus:border-[#00d4aa] transition-colors w-full;
+  }
+
+  /* Table */
+  .data-table { @apply w-full text-sm; }
+  .data-table thead tr { @apply border-b border-[#1e2d45]; }
+  .data-table thead th { @apply text-xs text-slate-500 uppercase tracking-wide pb-3 text-left font-medium; }
+  .data-table tbody tr { @apply border-b border-[#1e2d45] last:border-0 hover:bg-[#111827] transition-colors; }
+  .data-table tbody td { @apply py-3 text-slate-300; }
+
+  /* Verdict chips */
+  .verdict-approve { @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-[rgba(34,197,94,0.1)] text-green-400 border border-[rgba(34,197,94,0.3)]; }
+  .verdict-review   { @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-[rgba(245,158,11,0.1)] text-amber-400 border border-[rgba(245,158,11,0.3)]; }
+  .verdict-reject   { @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold bg-[rgba(239,68,68,0.1)] text-red-400 border border-[rgba(239,68,68,0.3)]; }
 }

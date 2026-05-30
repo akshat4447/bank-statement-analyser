@@ -34,21 +34,21 @@ export default function CashFlowChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={chartData} barGap={4} barSize={22}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e2d45" vertical={false} />
         <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={formatINRShort} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f8fafc" }} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Bar
           dataKey="Credits"
-          fill="#0d7377"
+          fill="#00d4aa"
           radius={[4, 4, 0, 0]}
           isAnimationActive={true}
           animationDuration={800}
         />
         <Bar
           dataKey="Debits"
-          fill="#e74c3c"
+          fill="#ef4444"
           radius={[4, 4, 0, 0]}
           isAnimationActive={true}
           animationDuration={800}

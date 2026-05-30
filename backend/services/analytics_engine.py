@@ -13,7 +13,7 @@ import numpy as np
 from models.schemas import (
     Transaction, AccountInfo, AnalyticsResult, MonthlyStats,
     SpendingCategory, CreditworthinessMetrics, RiskFlag, TransactionCategory,
-    MerchantSpend, IncomeSource,
+    MerchantSpend, IncomeSource, UnderwriterRecommendation, StatementQuality,
 )
 
 
@@ -404,9 +404,75 @@ def run_analytics(
         risk_flags.append(RiskFlag(
             flag_type="HIGH_UPI_DEPENDENCY",
             severity="low",
-            description=f"{upi_pct}% of transactions are UPI — all digital, no cheque/cash",
-            evidence="Good digital footprint, typical for young urban professional",
+            description=f"{upi_pct}% of transactions are UPI — strong digital footprint",
+            evidence="Typical for young urban professional",
         ))
+
+    # ── Gambling / high-risk merchant detection ───────────────────────────────
+    GAMBLING_KEYWORDS = ["DREAM11", "MPL ", "RUMMY", "POKER", "CASINO", "BET", "GAMBL",
+                         "FANTASY", "MY11", "WINZO", "ADDA52", "JUNGLEE", "HOBIGAMES",
+                         "CRYPTO", "BINANCE", "COINBASE", "WAZIRX", "ZEBPAY", "COINDCX"]
+    gambling_txns = []
+    for t in transactions:
+        narr_upper = t.narration.upper()
+        if any(kw in narr_upper for kw in GAMBLING_KEYWORDS):
+            t.category = TransactionCategory.GAMBLING
+            t.is_suspicious = True
+            gambling_txns.append(t)
+    if gambling_txns:
+        gambling_total = sum((t.debit or 0) for t in gambling_txns)
+        risk_flags.append(RiskFlag(
+            flag_type="GAMBLING_HIGH_RISK_MERCHANTS",
+            severity="high",
+            description=f"₹{gambling_total:,.0f} spent on gambling/crypto/high-risk platforms",
+            evidence=", ".join(set(extract_merchant(t.narration) for t in gambling_txns[:3])),
+        ))
+
+    # ── Savings rate & spend-to-income ───────────────────────────────────────
+    savings_rate = round((net_cash_flow / total_credits * 100), 1) if total_credits > 0 else 0.0
+    spend_to_income = round((total_debits / total_credits * 100), 1) if total_credits > 0 else 0.0
+
+    # ── Statement quality ─────────────────────────────────────────────────────
+    low_conf = sum(1 for t in transactions if t.confidence < 0.7)
+    balance_errors = 0
+    sorted_txns = sorted(transactions, key=lambda x: x.date)
+    for i in range(1, min(len(sorted_txns), 50)):
+        prev, curr = sorted_txns[i-1], sorted_txns[i]
+        if prev.balance and curr.balance and curr.debit:
+            exp = prev.balance - curr.debit
+            if abs(exp - curr.balance) > 5:
+                balance_errors += 1
+    balance_pass = round((1 - balance_errors / max(min(len(sorted_txns)-1, 49), 1)) * 100, 1)
+    quality_score = round((balance_pass * 0.5 + (1 - low_conf / max(len(transactions), 1)) * 100 * 0.5), 1)
+    quality_grade = "A" if quality_score >= 90 else "B" if quality_score >= 80 else "C" if quality_score >= 70 else "D" if quality_score >= 60 else "F"
+    statement_quality = StatementQuality(
+        total_rows_extracted=len(transactions),
+        missing_uncertain_rows=low_conf,
+        ocr_confidence=round((1 - low_conf / max(len(transactions), 1)) * 100, 1),
+        balance_continuity_pass_rate=balance_pass,
+        duplicate_rows_detected=0,
+        overall_quality_score=quality_score,
+        grade=quality_grade,
+    )
+
+    # ── Underwriter recommendation ────────────────────────────────────────────
+    underwriter = _generate_underwriter_rec(
+        bsa_score=bsa_score,
+        foir=foir,
+        bounce_count=bounce_count,
+        primary_income=primary_income,
+        avg_monthly_emi=avg_monthly_emi,
+        risk_flags=risk_flags,
+        income_sources=income_sources,
+        gambling_count=len(gambling_txns),
+    )
+
+    # ── Score component breakdown ─────────────────────────────────────────────
+    creditworthiness.score_income_stability = round(min(20, (income_stability / 100) * 20), 1)
+    creditworthiness.score_cash_flow = round(min(20, max(0, (1 - abs(spend_to_income - 70) / 100) * 20)), 1)
+    creditworthiness.score_balance_behavior = round(min(20, (avg_balance / max(primary_income, 1)) * 10), 1)
+    creditworthiness.score_debt_burden = round(min(20, max(0, 20 - (foir or 0) / 5)), 1)
+    creditworthiness.score_risk_events = round(max(0, 20 - bounce_count * 4 - len(gambling_txns) * 2), 1)
 
     return AnalyticsResult(
         total_credits=round(total_credits, 2),
@@ -424,19 +490,72 @@ def run_analytics(
         merchant_breakdown=merchant_breakdown,
         income_sources=income_sources,
         upi_transaction_percentage=upi_pct,
+        savings_rate=savings_rate,
+        spend_to_income_ratio=spend_to_income,
         creditworthiness=creditworthiness,
+        underwriter=underwriter,
+        statement_quality=statement_quality,
         salary_transactions=[t for t in transactions if t.is_salary],
         emi_transactions=[t for t in transactions if t.is_emi],
         bounce_transactions=[t for t in transactions if t.is_bounce],
         suspicious_transactions=[t for t in transactions if t.is_suspicious],
         recurring_transactions=[t for t in transactions if t.is_recurring],
+        gambling_transactions=gambling_txns,
+    )
+
+
+def _generate_underwriter_rec(
+    bsa_score: float, foir: Optional[float], bounce_count: int,
+    primary_income: float, avg_monthly_emi: float,
+    risk_flags: list, income_sources: list, gambling_count: int,
+) -> UnderwriterRecommendation:
+    reasons = []
+    triggers = []
+
+    # Decision logic
+    reject_triggers = bounce_count > 5 or (foir and foir > 75) or gambling_count > 10
+    review_triggers = (bounce_count > 2 or (foir and foir > 55) or
+                       any(s.flag for s in income_sources) or gambling_count > 0)
+
+    if reject_triggers:
+        verdict = "REJECT"
+        verdict_color = "red"
+        if bounce_count > 5: reasons.append(f"{bounce_count} bounced transactions indicate payment stress")
+        if foir and foir > 75: reasons.append(f"FOIR {foir}% severely exceeds safe threshold")
+        if gambling_count > 10: reasons.append("Significant gambling/high-risk spending detected")
+    elif review_triggers or bsa_score < 55:
+        verdict = "REVIEW"
+        verdict_color = "amber"
+        if bounce_count > 0: triggers.append(f"Verify reason for {bounce_count} bounce(s)")
+        if foir and foir > 55: triggers.append(f"FOIR {foir}% — verify all EMI obligations")
+        if any(s.flag for s in income_sources): triggers.append("Income source verification required (P2P transfers)")
+        if gambling_count > 0: triggers.append(f"Review {gambling_count} gambling/high-risk transactions")
+        reasons.append(f"BSA Score {bsa_score}/100 requires manual review")
+    else:
+        verdict = "APPROVE"
+        verdict_color = "green"
+        if foir and foir < 35: reasons.append(f"Low FOIR ({foir}%) — strong repayment capacity")
+        if bounce_count == 0: reasons.append("No bounce history — reliable payment track record")
+        if bsa_score >= 75: reasons.append(f"Strong BSA Score ({bsa_score}/100)")
+
+    # Loan calculations
+    max_safe_emi = max(0.0, primary_income * 0.5 - avg_monthly_emi)
+    # Suggested loan: 48x monthly EMI capacity (4-year tenure)
+    suggested_loan = round(max_safe_emi * 48 / 1000) * 1000
+
+    return UnderwriterRecommendation(
+        verdict=verdict,
+        verdict_color=verdict_color,
+        suggested_loan_amount=suggested_loan,
+        suggested_emi_capacity=round(max_safe_emi, 2),
+        key_reasons=reasons[:4],
+        manual_review_triggers=triggers[:4],
+        confidence=round(min(95, bsa_score + 10), 1),
     )
 
 
 def _is_likely_personal_transfer(merchant: str, txn_df) -> bool:
-    """Returns True if credits from this merchant look like personal P2P transfers."""
     words = merchant.strip().split()
-    # Short alphabetic name = likely personal name
     if len(words) <= 3 and all(w.replace(".", "").isalpha() for w in words if w):
         return True
     return False
