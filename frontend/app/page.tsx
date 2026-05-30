@@ -36,7 +36,7 @@ export default function Home() {
 
           <h1 className="text-5xl md:text-6xl font-black text-slate-100 mb-4 leading-tight">
             Bank Statement
-            <span className="block text-gradient">Intelligence Platform</span>
+            <span className="block text-gradient">Analyser</span>
           </h1>
 
           <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">

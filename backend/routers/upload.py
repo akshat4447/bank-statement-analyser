@@ -1,6 +1,7 @@
 import os
 import uuid
 import asyncio
+import threading
 from datetime import datetime
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -26,7 +27,7 @@ _executor = ThreadPoolExecutor(max_workers=4)
 
 
 def _run_qa_background(analysis_id: str, raw_text: str, transactions, analytics, account_info):
-    """Runs QA validation in background — updates DB record when done."""
+    """Runs QA validation in a real background thread — reliable, non-blocking."""
     from services.qa_validator import run_qa_validation
     db = SessionLocal()
     try:
@@ -37,7 +38,23 @@ def _run_qa_background(analysis_id: str, raw_text: str, transactions, analytics,
         record.qa_result = qa_result.model_dump()
         db.commit()
     except Exception as e:
-        pass  # QA failure should not affect completed analysis
+        # Store QA error in record so frontend knows it failed
+        db2 = SessionLocal()
+        try:
+            r = db2.query(AnalysisRecord).filter(AnalysisRecord.id == analysis_id).first()
+            if r:
+                r.qa_result = {
+                    "overall_confidence": 0, "extraction_accuracy": 0,
+                    "calculation_accuracy": 0, "categorization_accuracy": 0,
+                    "checks": [], "issues_found": [f"QA validation error: {str(e)}"],
+                    "data_quality_grade": "F", "manual_review_required": True,
+                    "validated_at": datetime.utcnow().isoformat(),
+                }
+                db2.commit()
+        except Exception:
+            pass
+        finally:
+            db2.close()
     finally:
         db.close()
 
@@ -110,17 +127,14 @@ async def run_full_analysis(analysis_id: str, file_path: str, bank_name: str):
         record.completed_at = datetime.utcnow()
         db.commit()
 
-        # ── Step 6: QA runs in background (non-blocking) ──────────────────────
-        record.status = AnalysisStatus.VALIDATING.value
-        db.commit()
-        loop.run_in_executor(
-            _executor,
-            _run_qa_background,
-            analysis_id, raw_text, transactions, analytics, account_info
+        # ── Step 6: QA runs in a real daemon thread (guaranteed to execute) ─────
+        qa_thread = threading.Thread(
+            target=_run_qa_background,
+            args=(analysis_id, raw_text, transactions, analytics, account_info),
+            daemon=True,
         )
-        # Mark completed again after kicking off QA (UI shows results)
-        record.status = AnalysisStatus.COMPLETED.value
-        db.commit()
+        qa_thread.start()
+        # Status stays COMPLETED — user sees dashboard immediately
 
     except Exception as e:
         record.status = AnalysisStatus.FAILED.value
