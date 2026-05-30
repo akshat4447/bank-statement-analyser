@@ -18,5 +18,5 @@ services:
       - key: DATABASE_URL
         value: sqlite:////tmp/bank_analyser.db
       - key: ALLOWED_ORIGINS
-        value: https://your-app.netlify.app,http://localhost:3000
+        value: https://stellular-sawine-6111fe.netlify.app,http://localhost:3000
     healthCheckPath: /health
