@@ -21,6 +21,14 @@ Critical rules:
 8. Assign confidence 0.0-1.0 per transaction based on readability
 9. For OCR text, correct obvious errors (O vs 0, l vs 1) using context
 10. Never return empty transactions array — extract whatever data is present
+11. CRITICAL for ICICI/merged-column statements: when only ONE amount appears per row alongside a running balance,
+    determine debit vs credit by comparing consecutive balances:
+    - If balance DECREASED → withdrawal → put amount in DEBIT field
+    - If balance INCREASED → deposit → put amount in CREDIT field
+    Example: prev_balance=458238.69, amount=20.00, new_balance=458218.69 → balance fell → DEBIT=20.00
+    Example: prev_balance=458193.69, amount=20000.00, new_balance=478193.69 → balance rose → CREDIT=20000.00
+12. In ICICI format, transaction remarks appear on lines AFTER the date/amount/balance line — combine them as the narration
+    (e.g. "UPI/SWIGGY/upiswiggy@icic/..." → narration = "SWIGGY UPI")
 """
 
 CLASSIFICATION_SYSTEM_PROMPT = """You are a financial transaction categorization expert specializing in Indian banking.
