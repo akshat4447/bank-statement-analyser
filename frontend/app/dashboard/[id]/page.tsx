@@ -171,23 +171,76 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "analytics" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div className="card">
-            <h3 className="font-semibold text-navy mb-4">Monthly Cash Flow</h3>
-            <CashFlowChart data={an.monthly_stats} />
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="card"><h3 className="font-semibold text-navy mb-4">Monthly Cash Flow</h3><CashFlowChart data={an.monthly_stats} /></div>
+            <div className="card"><h3 className="font-semibold text-navy mb-4">Spending Breakdown</h3><SpendingDonut data={an.spending_breakdown} /></div>
+            <div className="card"><h3 className="font-semibold text-navy mb-4">Balance Trend</h3><BalanceTrendChart data={an.monthly_stats} /></div>
+            <div className="card"><h3 className="font-semibold text-navy mb-4">Salary vs EMI vs Net Flow</h3><IncomeExpenseChart data={an.monthly_stats} /></div>
           </div>
-          <div className="card">
-            <h3 className="font-semibold text-navy mb-4">Spending Breakdown</h3>
-            <SpendingDonut data={an.spending_breakdown} />
-          </div>
-          <div className="card">
-            <h3 className="font-semibold text-navy mb-4">Balance Trend</h3>
-            <BalanceTrendChart data={an.monthly_stats} />
-          </div>
-          <div className="card">
-            <h3 className="font-semibold text-navy mb-4">Salary vs EMI vs Net Flow</h3>
-            <IncomeExpenseChart data={an.monthly_stats} />
-          </div>
+
+          {/* Merchant spend table */}
+          {an.merchant_breakdown?.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold text-navy mb-4">Top Merchant Spend</h3>
+              <div className="overflow-x-auto"><table className="w-full text-sm">
+                <thead><tr className="text-xs text-gray-400 border-b"><th className="text-left pb-2">Merchant</th><th className="text-left pb-2">Category</th><th className="text-right pb-2">Amount</th><th className="text-right pb-2">Txns</th></tr></thead>
+                <tbody>{an.merchant_breakdown.map((m, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-2 font-medium text-navy">{m.merchant}</td>
+                    <td className="py-2 text-gray-500 text-xs">{m.category}</td>
+                    <td className="py-2 text-right font-semibold">₹{m.amount.toLocaleString("en-IN")}</td>
+                    <td className="py-2 text-right text-gray-400">{m.count}×</td>
+                  </tr>
+                ))}</tbody>
+              </table></div>
+            </div>
+          )}
+
+          {/* Income sources */}
+          {an.income_sources?.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold text-navy mb-4">Income Sources</h3>
+              <div className="space-y-2">
+                {an.income_sources.map((src, i) => (
+                  <div key={i} className={`flex items-center justify-between p-3 rounded-xl border text-sm ${src.flag ? "bg-amber-50 border-amber-200" : "bg-green-50 border-green-100"}`}>
+                    <div>
+                      <span className="font-semibold text-navy">{src.source}</span>
+                      {src.flag && <p className="text-xs text-amber-600 mt-0.5">{src.flag}</p>}
+                      {src.is_verified_salary && <p className="text-xs text-green-600 mt-0.5">✓ Verified salary</p>}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold">₹{src.total_amount.toLocaleString("en-IN")}</div>
+                      <div className="text-xs text-gray-400">{src.transaction_count} credit(s)</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {an.upi_transaction_percentage > 0 && (
+                <p className="text-xs text-gray-400 mt-3">📱 {an.upi_transaction_percentage}% of all transactions are UPI — strong digital footprint</p>
+              )}
+            </div>
+          )}
+
+          {/* Recurring transactions */}
+          {an.recurring_transactions?.length > 0 && (
+            <div className="card">
+              <h3 className="font-semibold text-navy mb-4">Recurring Transactions ({an.recurring_transactions.length})</h3>
+              <div className="overflow-x-auto"><table className="w-full text-sm">
+                <thead><tr className="text-xs text-gray-400 border-b"><th className="text-left pb-2">Date</th><th className="text-left pb-2">Merchant</th><th className="text-left pb-2">Category</th><th className="text-right pb-2">Amount</th></tr></thead>
+                <tbody>{an.recurring_transactions.slice(0, 20).map((t, i) => (
+                  <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-2 text-gray-500 text-xs">{t.date}</td>
+                    <td className="py-2 font-medium text-navy">{t.narration.slice(0, 40)}</td>
+                    <td className="py-2 text-xs text-gray-400">{t.category}</td>
+                    <td className={`py-2 text-right font-semibold ${t.credit ? "text-green-600" : "text-red-500"}`}>
+                      {t.credit ? `+₹${t.credit.toLocaleString("en-IN")}` : `-₹${t.debit?.toLocaleString("en-IN")}`}
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -195,8 +248,15 @@ export default function DashboardPage() {
         <RiskPanel cw={an.creditworthiness} />
       )}
 
-      {activeTab === "qa" && data.qa_result && (
-        <QAReport qa={data.qa_result} />
+      {activeTab === "qa" && (
+        data.qa_result
+          ? <QAReport qa={data.qa_result} />
+          : <div className="card text-center py-10 text-gray-400">
+              <p className="text-2xl mb-2">⏳</p>
+              <p className="font-medium text-navy">QA validation is running in the background</p>
+              <p className="text-sm mt-1">Refresh in a few seconds</p>
+              <button onClick={poll} className="mt-4 text-sm px-4 py-2 bg-teal text-white rounded-xl hover:opacity-90 transition-opacity">Refresh Now</button>
+            </div>
       )}
 
       {activeTab === "chat" && (

@@ -100,6 +100,21 @@ class SpendingCategory(BaseModel):
     transaction_count: int
 
 
+class MerchantSpend(BaseModel):
+    merchant: str
+    amount: float
+    count: int
+    category: str
+
+
+class IncomeSource(BaseModel):
+    source: str
+    total_amount: float
+    transaction_count: int
+    is_verified_salary: bool
+    flag: Optional[str] = None  # e.g. "P2P transfer — unverified income"
+
+
 class AnalyticsResult(BaseModel):
     total_credits: float
     total_debits: float
@@ -109,8 +124,14 @@ class AnalyticsResult(BaseModel):
     max_balance: float
     total_transactions: int
     analysis_period_months: int
+    # Actual dates derived from transaction data (not PDF header)
+    actual_period_from: Optional[str] = None
+    actual_period_to: Optional[str] = None
     monthly_stats: List[MonthlyStats]
     spending_breakdown: List[SpendingCategory]
+    merchant_breakdown: List[MerchantSpend] = []
+    income_sources: List[IncomeSource] = []
+    upi_transaction_percentage: float = 0.0
     creditworthiness: CreditworthinessMetrics
     salary_transactions: List[Transaction] = []
     emi_transactions: List[Transaction] = []

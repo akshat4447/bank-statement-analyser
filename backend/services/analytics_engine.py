@@ -13,6 +13,7 @@ import numpy as np
 from models.schemas import (
     Transaction, AccountInfo, AnalyticsResult, MonthlyStats,
     SpendingCategory, CreditworthinessMetrics, RiskFlag, TransactionCategory,
+    MerchantSpend, IncomeSource,
 )
 
 
@@ -319,8 +320,14 @@ def run_analytics(
         risk_flags=risk_flags,
     )
 
-    # Spending breakdown
-    expense_df = df[df["debit"] > 0]
+    # ── Actual statement period from transaction dates (not PDF header) ──────
+    actual_period_from = df["date"].min().strftime("%Y-%m-%d") if not df.empty else None
+    actual_period_to = df["date"].max().strftime("%Y-%m-%d") if not df.empty else None
+
+    # ── Spending breakdown (exclude Transfer for meaningful donut) ────────────
+    from services.transaction_classifier import extract_merchant
+    expense_df = df[df["debit"] > 0].copy()
+    # Don't count pure transfers in spending breakdown — use all categories
     category_groups = expense_df.groupby("category")["debit"].agg(["sum", "count"])
     total_expense = float(expense_df["debit"].sum())
 
@@ -334,6 +341,73 @@ def run_analytics(
         ))
     spending_breakdown.sort(key=lambda x: x.amount, reverse=True)
 
+    # ── Merchant breakdown (top 15 merchants by spend) ────────────────────────
+    expense_df["merchant"] = expense_df["narration"].apply(extract_merchant)
+    merchant_groups = expense_df.groupby("merchant").agg(
+        amount=("debit", "sum"),
+        count=("debit", "count"),
+        category=("category", lambda x: x.mode()[0] if len(x) > 0 else "Other")
+    ).reset_index()
+    merchant_groups = merchant_groups.sort_values("amount", ascending=False).head(15)
+
+    merchant_breakdown = [
+        MerchantSpend(
+            merchant=row["merchant"],
+            amount=round(float(row["amount"]), 2),
+            count=int(row["count"]),
+            category=str(row["category"]),
+        )
+        for _, row in merchant_groups.iterrows()
+    ]
+
+    # ── Income source analysis — flag P2P vs salary ───────────────────────────
+    credit_df = df[df["credit"] > 0].copy()
+    credit_df["merchant"] = credit_df["narration"].apply(extract_merchant)
+    income_groups = credit_df.groupby("merchant").agg(
+        total=("credit", "sum"),
+        count=("credit", "count"),
+        is_salary=("is_salary", "any"),
+    ).reset_index().sort_values("total", ascending=False).head(10)
+
+    income_sources = []
+    for _, row in income_groups.iterrows():
+        merchant_name = str(row["merchant"])
+        is_verified = bool(row["is_salary"])
+        # P2P flag: personal name, UPI transfer, no company indicators
+        is_p2p = _is_likely_personal_transfer(merchant_name, credit_df[credit_df["merchant"] == merchant_name])
+        flag = None
+        if is_p2p and float(row["total"]) > 1000:
+            flag = "⚠️ P2P transfer — unverified income, not salary"
+        income_sources.append(IncomeSource(
+            source=merchant_name,
+            total_amount=round(float(row["total"]), 2),
+            transaction_count=int(row["count"]),
+            is_verified_salary=is_verified,
+            flag=flag,
+        ))
+
+    # Flag P2P income in risk flags
+    p2p_income = [s for s in income_sources if s.flag]
+    if p2p_income:
+        total_p2p = sum(s.total_amount for s in p2p_income)
+        risk_flags.append(RiskFlag(
+            flag_type="UNVERIFIED_INCOME_SOURCE",
+            severity="medium",
+            description=f"₹{total_p2p:,.0f} income is from P2P transfers, not verifiable salary",
+            evidence=", ".join(s.source for s in p2p_income[:3]),
+        ))
+
+    # ── UPI dominance ─────────────────────────────────────────────────────────
+    upi_count = sum(1 for t in transactions if t.narration.upper().startswith("UPI"))
+    upi_pct = round(upi_count / max(len(transactions), 1) * 100, 1)
+    if upi_pct > 90:
+        risk_flags.append(RiskFlag(
+            flag_type="HIGH_UPI_DEPENDENCY",
+            severity="low",
+            description=f"{upi_pct}% of transactions are UPI — all digital, no cheque/cash",
+            evidence="Good digital footprint, typical for young urban professional",
+        ))
+
     return AnalyticsResult(
         total_credits=round(total_credits, 2),
         total_debits=round(total_debits, 2),
@@ -343,8 +417,13 @@ def run_analytics(
         max_balance=round(max_balance, 2),
         total_transactions=len(transactions),
         analysis_period_months=n_months,
+        actual_period_from=actual_period_from,
+        actual_period_to=actual_period_to,
         monthly_stats=monthly_stats,
         spending_breakdown=spending_breakdown,
+        merchant_breakdown=merchant_breakdown,
+        income_sources=income_sources,
+        upi_transaction_percentage=upi_pct,
         creditworthiness=creditworthiness,
         salary_transactions=[t for t in transactions if t.is_salary],
         emi_transactions=[t for t in transactions if t.is_emi],
@@ -352,3 +431,12 @@ def run_analytics(
         suspicious_transactions=[t for t in transactions if t.is_suspicious],
         recurring_transactions=[t for t in transactions if t.is_recurring],
     )
+
+
+def _is_likely_personal_transfer(merchant: str, txn_df) -> bool:
+    """Returns True if credits from this merchant look like personal P2P transfers."""
+    words = merchant.strip().split()
+    # Short alphabetic name = likely personal name
+    if len(words) <= 3 and all(w.replace(".", "").isalpha() for w in words if w):
+        return True
+    return False

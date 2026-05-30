@@ -76,8 +76,10 @@ export default function OverviewCards({ analytics, accountInfo }: Props) {
               <p className="text-blue-200 text-sm mt-0.5">{accountInfo.bank_name} · {accountInfo.account_type}</p>
             </div>
             <div className="text-right">
-              <p className="text-blue-200 text-xs">Statement Period</p>
-              <p className="font-semibold">{accountInfo.statement_period_from} → {accountInfo.statement_period_to}</p>
+              <p className="text-blue-200 text-xs">Transaction Period (actual)</p>
+              <p className="font-semibold">
+                {analytics.actual_period_from || accountInfo.statement_period_from} → {analytics.actual_period_to || accountInfo.statement_period_to}
+              </p>
               <p className="text-blue-200 text-xs mt-1">A/C: {accountInfo.account_number || "—"}</p>
             </div>
           </div>
@@ -122,7 +124,7 @@ export default function OverviewCards({ analytics, accountInfo }: Props) {
         <MetricCard
           label="Avg Monthly Balance"
           value={formatINRShort(analytics.average_monthly_balance)}
-          sub={`Min: ${formatINRShort(analytics.min_balance)}`}
+          sub={`Min: ${formatINRShort(analytics.min_balance)} · Max: ${formatINRShort(analytics.max_balance)}`}
           icon={<Activity className="w-4 h-4" />}
         />
       </div>

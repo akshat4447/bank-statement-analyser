@@ -76,6 +76,21 @@ export interface SpendingCategory {
   transaction_count: number;
 }
 
+export interface MerchantSpend {
+  merchant: string;
+  amount: number;
+  count: number;
+  category: string;
+}
+
+export interface IncomeSource {
+  source: string;
+  total_amount: number;
+  transaction_count: number;
+  is_verified_salary: boolean;
+  flag?: string;
+}
+
 export interface AnalyticsResult {
   total_credits: number;
   total_debits: number;
@@ -85,8 +100,13 @@ export interface AnalyticsResult {
   max_balance: number;
   total_transactions: number;
   analysis_period_months: number;
+  actual_period_from?: string;
+  actual_period_to?: string;
   monthly_stats: MonthlyStats[];
   spending_breakdown: SpendingCategory[];
+  merchant_breakdown: MerchantSpend[];
+  income_sources: IncomeSource[];
+  upi_transaction_percentage: number;
   creditworthiness: CreditworthinessMetrics;
   salary_transactions: Transaction[];
   emi_transactions: Transaction[];
