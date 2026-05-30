@@ -137,6 +137,37 @@ def extract_text_from_image(image_path: str) -> str:
     return pytesseract.image_to_string(preprocessed, config=custom_config, lang="eng")
 
 
+def preprocess_icici_format(text: str) -> str:
+    """
+    ICICI Bank statements have merged Withdrawal/Deposit columns in extracted text.
+    Pattern per transaction: S.No  DD.MM.YYYY  Amount  Balance  (then narration lines)
+    We parse this and rebuild as a clean CSV with explicit Debit/Credit columns.
+    """
+    pattern = r'\d+\s+(\d{2}\.\d{2}\.\d{4})\s+([\d,]+\.?\d*)\s+([\d,]+\.?\d*)\n((?:(?!\d+\s+\d{2}\.\d{2}\.\d{4}).+\n?)*)'
+    matches = re.findall(pattern, text)
+    if len(matches) < 3:
+        return text  # Not ICICI format, return as-is
+
+    lines = ["Date,Debit,Credit,Balance,Narration"]
+    prev_balance = None
+    for date, amount, balance, remarks in matches:
+        amount_f = float(amount.replace(",", ""))
+        balance_f = float(balance.replace(",", ""))
+        narration = " ".join(remarks.strip().split())[:100]
+        # Determine debit vs credit by balance movement
+        if prev_balance is not None:
+            if balance_f < prev_balance:
+                lines.append(f"{date},{amount_f},,{balance_f},{narration}")
+            else:
+                lines.append(f"{date},,{amount_f},{balance_f},{narration}")
+        else:
+            # First row — guess from balance
+            lines.append(f"{date},{amount_f},,{balance_f},{narration}")
+        prev_balance = balance_f
+
+    return "\n".join(lines)
+
+
 def clean_extracted_text(text: str) -> str:
     """Clean up OCR/extraction artifacts while preserving table structure."""
     # Remove excessive whitespace but keep newlines
@@ -187,7 +218,10 @@ def process_document(file_path: str) -> dict:
             result["extraction_method"] = "ocr_pdf"
         else:
             raw_text, tables = extract_text_from_digital_pdf(file_path)
-            result["raw_text"] = clean_extracted_text(raw_text)
+            cleaned = clean_extracted_text(raw_text)
+            # Apply ICICI-specific pre-processing if applicable
+            preprocessed = preprocess_icici_format(cleaned)
+            result["raw_text"] = preprocessed
             result["tables"] = tables
             result["extraction_method"] = "pdfplumber"
 
