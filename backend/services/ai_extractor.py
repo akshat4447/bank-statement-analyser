@@ -126,6 +126,91 @@ def _chunk_text(text: str, max_chars: int = 80000) -> list[str]:
     return chunks
 
 
+def extract_transactions_vision(page_images: list[str], bank_name: str = "Unknown") -> Tuple[AccountInfo, list[Transaction]]:
+    """
+    Claude Vision extraction — sends each page as an image.
+    Works for ANY bank format without any text parsing logic.
+    """
+    all_transactions = []
+    account_info = None
+
+    for page_idx, b64_image in enumerate(page_images):
+        is_first = page_idx == 0
+        content = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": b64_image,
+                },
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"This is page {page_idx + 1} of a bank statement from {bank_name}.\n"
+                    + (
+                        "Extract the account information AND every transaction visible in the table. "
+                        "For each row: read the date, description/narration, and amounts. "
+                        "Determine if each amount is a debit (money OUT) or credit (money IN) "
+                        "by reading column headers (Withdrawal/Debit/Dr = debit, Deposit/Credit/Cr = credit) "
+                        "or by checking if the running balance decreased (debit) or increased (credit). "
+                        "Extract ALL rows — do not skip any."
+                        if is_first else
+                        "Extract ALL transactions visible on this page. Same rules as before."
+                    )
+                ),
+            },
+        ]
+
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8000,
+            system=[{"type": "text", "text": EXTRACTION_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            tools=[EXTRACTION_TOOL],
+            tool_choice={"type": "tool", "name": "extract_bank_statement_data"},
+            messages=[{"role": "user", "content": content}],
+        )
+
+        tool_use_block = next((b for b in response.content if b.type == "tool_use"), None)
+        if not tool_use_block:
+            continue
+
+        data = tool_use_block.input
+
+        if is_first and data.get("account_info"):
+            ai = data["account_info"]
+            account_info = AccountInfo(
+                account_holder=ai.get("account_holder"),
+                account_number=ai.get("account_number"),
+                bank_name=ai.get("bank_name") or bank_name,
+                branch=ai.get("branch"),
+                ifsc=ai.get("ifsc"),
+                statement_period_from=ai.get("statement_period_from"),
+                statement_period_to=ai.get("statement_period_to"),
+                account_type=ai.get("account_type"),
+                opening_balance=ai.get("opening_balance"),
+                closing_balance=ai.get("closing_balance"),
+            )
+
+        for raw_txn in data.get("transactions", []):
+            txn = Transaction(
+                date=raw_txn.get("date", ""),
+                narration=raw_txn.get("narration", ""),
+                debit=raw_txn.get("debit"),
+                credit=raw_txn.get("credit"),
+                balance=raw_txn.get("balance"),
+                confidence=raw_txn.get("confidence", 1.0),
+            )
+            txn.transaction_type = "credit" if txn.credit else "debit"
+            all_transactions.append(txn)
+
+    if account_info is None:
+        account_info = AccountInfo(bank_name=bank_name)
+
+    return account_info, all_transactions
+
+
 def extract_transactions(raw_text: str, bank_name: str = "Unknown") -> Tuple[AccountInfo, list[Transaction]]:
     """
     Pass 1: Extract raw transactions from statement text using Claude tool_use.

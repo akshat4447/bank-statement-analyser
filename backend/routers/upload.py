@@ -40,10 +40,15 @@ async def run_full_analysis(analysis_id: str, file_path: str, bank_name: str):
         doc_result = process_document(file_path)
         raw_text = doc_result["raw_text"]
         detected_bank = doc_result["bank_name"]
+        page_images = doc_result.get("page_images", [])
         record.raw_text = raw_text[:50000]  # Store first 50k chars
 
-        # Step 2: AI extraction
-        account_info, transactions = extract_transactions(raw_text, detected_bank)
+        # Step 2: AI extraction — use Vision if images available, else text fallback
+        from services.ai_extractor import extract_transactions_vision
+        if page_images:
+            account_info, transactions = extract_transactions_vision(page_images, detected_bank)
+        else:
+            account_info, transactions = extract_transactions(raw_text, detected_bank)
         if not transactions:
             raise ValueError("No transactions could be extracted from this document")
 

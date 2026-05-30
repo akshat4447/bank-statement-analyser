@@ -1,12 +1,15 @@
 """
 Document processor: handles digital PDFs, scanned PDFs, and passbook images.
-Uses pdfplumber for text-based PDFs and pytesseract for scanned/image content.
+Uses pdf2image to convert pages to images for Claude Vision extraction.
+pdfplumber is kept as fallback for text extraction only.
 """
 import os
 import re
+import base64
 import tempfile
 from pathlib import Path
 from typing import Tuple
+from io import BytesIO
 
 import pdfplumber
 import pytesseract
@@ -137,6 +140,27 @@ def extract_text_from_image(image_path: str) -> str:
     return pytesseract.image_to_string(preprocessed, config=custom_config, lang="eng")
 
 
+def pdf_pages_to_base64(pdf_path: str, max_pages: int = 15, dpi: int = 150) -> list[str]:
+    """
+    Convert PDF pages to base64-encoded PNG images for Claude Vision.
+    Lower DPI (150) keeps image size manageable while remaining readable.
+    Returns list of base64 strings, one per page.
+    """
+    images = convert_from_path(pdf_path, dpi=dpi, fmt="PNG")
+    result = []
+    for img in images[:max_pages]:
+        # Resize if too large (max 1600px wide to stay within Claude vision limits)
+        w, h = img.size
+        if w > 1600:
+            ratio = 1600 / w
+            img = img.resize((1600, int(h * ratio)), Image.LANCZOS)
+        buffer = BytesIO()
+        img.save(buffer, format="PNG", optimize=True)
+        b64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
+        result.append(b64)
+    return result
+
+
 def preprocess_icici_format(text: str) -> str:
     """
     ICICI Bank statements have merged Withdrawal/Deposit columns in extracted text.
@@ -186,9 +210,11 @@ def clean_extracted_text(text: str) -> str:
 def process_document(file_path: str) -> dict:
     """
     Main entry point. Accepts PDF or image, returns structured extraction result.
+    Always converts pages to base64 images for Claude Vision extraction.
     Returns:
         {
             "raw_text": str,
+            "page_images": list[str],  # base64 PNG per page for Claude Vision
             "tables": list[str],
             "bank_name": str,
             "extraction_method": str,
@@ -198,6 +224,7 @@ def process_document(file_path: str) -> dict:
     file_ext = Path(file_path).suffix.lower()
     result = {
         "raw_text": "",
+        "page_images": [],
         "tables": [],
         "bank_name": "Unknown Bank",
         "extraction_method": "",
@@ -205,32 +232,33 @@ def process_document(file_path: str) -> dict:
     }
 
     if file_ext in (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"):
-        # Single image (e.g. passbook photo)
-        raw_text = extract_text_from_image(file_path)
-        result["raw_text"] = clean_extracted_text(raw_text)
-        result["extraction_method"] = "ocr_image"
+        # Single image — convert to base64 directly
+        img = Image.open(file_path)
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        b64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
+        result["page_images"] = [b64]
+        result["raw_text"] = extract_text_from_image(file_path)
+        result["extraction_method"] = "vision_image"
         result["page_count"] = 1
 
     elif file_ext == ".pdf":
-        if is_scanned_pdf(file_path):
-            raw_text = extract_text_from_scanned_pdf(file_path)
-            result["raw_text"] = clean_extracted_text(raw_text)
-            result["extraction_method"] = "ocr_pdf"
-        else:
-            raw_text, tables = extract_text_from_digital_pdf(file_path)
-            cleaned = clean_extracted_text(raw_text)
-            # Apply ICICI-specific pre-processing if applicable
-            preprocessed = preprocess_icici_format(cleaned)
-            result["raw_text"] = preprocessed
-            result["tables"] = tables
-            result["extraction_method"] = "pdfplumber"
-
-        # Count pages
+        # Always convert to images for Claude Vision (works for ANY bank format)
         try:
-            with pdfplumber.open(file_path) as pdf:
-                result["page_count"] = len(pdf.pages)
+            result["page_images"] = pdf_pages_to_base64(file_path, max_pages=15, dpi=150)
+            result["page_count"] = len(result["page_images"])
         except Exception:
             result["page_count"] = 1
+
+        # Also extract text as fallback/for bank name detection
+        if is_scanned_pdf(file_path):
+            result["raw_text"] = clean_extracted_text(extract_text_from_scanned_pdf(file_path))
+            result["extraction_method"] = "vision_scanned"
+        else:
+            raw_text, tables = extract_text_from_digital_pdf(file_path)
+            result["raw_text"] = clean_extracted_text(raw_text)
+            result["tables"] = tables
+            result["extraction_method"] = "vision_pdf"
     else:
         raise ValueError(f"Unsupported file type: {file_ext}")
 
