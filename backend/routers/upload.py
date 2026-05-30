@@ -35,7 +35,7 @@ def _run_qa_background(analysis_id: str, raw_text: str, transactions, analytics,
         if not record:
             return
         qa_result = run_qa_validation(raw_text, transactions, analytics, account_info)
-        record.qa_result = qa_result.model_dump()
+        record.qa_result = qa_result.model_dump(mode="json")  # converts datetime → ISO string
         db.commit()
     except Exception as e:
         # Store QA error in record so frontend knows it failed
@@ -112,15 +112,15 @@ async def run_full_analysis(analysis_id: str, file_path: str, bank_name: str):
             _executor, classify_transactions_hybrid, transactions
         )
 
-        record.account_info = account_info.model_dump()
-        record.transactions = [t.model_dump() for t in transactions]
+        record.account_info = account_info.model_dump(mode="json")
+        record.transactions = [t.model_dump(mode="json") for t in transactions]
 
         # ── Step 4: Analytics ─────────────────────────────────────────────────
         from services.analytics_engine import run_analytics
         analytics = await loop.run_in_executor(
             _executor, run_analytics, transactions, account_info
         )
-        record.analytics = analytics.model_dump()
+        record.analytics = analytics.model_dump(mode="json")
 
         # ── Step 5: Mark COMPLETED — user sees dashboard immediately ──────────
         record.status = AnalysisStatus.COMPLETED.value
