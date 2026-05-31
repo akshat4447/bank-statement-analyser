@@ -274,52 +274,110 @@ def _call_gemini_all(lines: list[str], index_map: list[int] | None = None) -> di
     return result
 
 
+# ── Normalization map: Gemini often returns short names, map to exact enum values ──
+_CATEGORY_NORMALIZE: dict[str, str] = {
+    # Short aliases Gemini commonly returns
+    "food": "Food & Grocery",
+    "grocery": "Food & Grocery",
+    "food & grocery": "Food & Grocery",
+    "travel": "Travel & Transport",
+    "transport": "Travel & Transport",
+    "travel & transport": "Travel & Transport",
+    "emi": "EMI/Loan Repayment",
+    "loan": "EMI/Loan Repayment",
+    "emi/loan repayment": "EMI/Loan Repayment",
+    "loan repayment": "EMI/Loan Repayment",
+    "cash": "Cash Withdrawal/Deposit",
+    "atm": "Cash Withdrawal/Deposit",
+    "cash withdrawal": "Cash Withdrawal/Deposit",
+    "cash withdrawal/deposit": "Cash Withdrawal/Deposit",
+    "bounce": "Bounce/Return",
+    "return": "Bounce/Return",
+    "bounce/return": "Bounce/Return",
+    "gambling": "Gambling/High-Risk",
+    "high-risk": "Gambling/High-Risk",
+    "gambling/high-risk": "Gambling/High-Risk",
+    "crypto": "Gambling/High-Risk",
+    "transfer": "Transfer",
+    "salary": "Salary",
+    "utilities": "Utilities",
+    "utility": "Utilities",
+    "shopping": "Shopping",
+    "entertainment": "Entertainment",
+    "investments": "Investments",
+    "investment": "Investments",
+    "medical": "Medical",
+    "healthcare": "Medical",
+    "education": "Education",
+    "insurance": "Insurance",
+    "rent": "Rent",
+    "other": "Other",
+}
+
+
+def _normalize_category(raw: str) -> TransactionCategory:
+    """Map any Gemini response string to a valid TransactionCategory, never raises."""
+    normalized = _CATEGORY_NORMALIZE.get(raw.lower().strip(), raw)
+    try:
+        return TransactionCategory(normalized)
+    except (ValueError, KeyError):
+        return TransactionCategory.OTHER
+
+
 def _gemini_request(model, lines: list[str], index_map: list[int]) -> dict[int, TransactionCategory]:
+    n = len(lines)
     batch_text = "\n".join(lines)
-    prompt = f"""Classify each Indian bank transaction into exactly one category.
-Input format: index|merchant_name|CR(incoming money) or DR(outgoing money)
+    prompt = f"""You are classifying {n} Indian bank transactions.
+Input: index|merchant_name|CR or DR
 
-Rules:
-- Transfer = UPI payment to a PERSON (individual name, phone number)
-- Salary = ONLY from company/employer via NEFT. Never P2P UPI.
-- Gambling/High-Risk = Dream11, MPL, fantasy sports, poker, casino, WazirX, Binance, CoinDCX, Winzo, Adda52
-- Food & Grocery = Swiggy, Zomato, Blinkit, Zepto, AMUL, cafe, restaurant, dhaba, canteen
-- Travel & Transport = IRCTC, Ola, Uber, Rapido, airlines, petrol, fuel
+You MUST return exactly {n} entries in your JSON — one per input line.
+
+Use ONLY these exact category strings (copy them exactly):
+"Salary", "EMI/Loan Repayment", "Rent", "Utilities", "Food & Grocery",
+"Travel & Transport", "Entertainment", "Insurance", "Investments",
+"Medical", "Shopping", "Education", "Cash Withdrawal/Deposit",
+"Transfer", "Bounce/Return", "Gambling/High-Risk", "Other"
+
+Classification rules:
+- Salary = employer NEFT credit (NOT UPI from individual person)
+- EMI/Loan Repayment = NACH, ECS, loan repayment debits
+- Food & Grocery = Swiggy, Zomato, Amul, cafe, restaurant, canteen, dhaba
+- Travel & Transport = IRCTC, Uber, Rapido, airlines, petrol, fuel, metro
 - Shopping = Amazon, Flipkart, Myntra, Meesho, ecommerce
-- Entertainment = Netflix, Spotify, BookMyShow, cinemas (NOT fantasy/gambling)
-- Utilities = electricity, water, gas, internet, mobile recharge, broadband
-- EMI/Loan Repayment = EMI, NACH, ECS, loan repayment
-- Investments = mutual fund, SIP, Zerodha, Groww, stocks
-- Medical = pharmacy, hospital, clinic, medicine
-- Education = school/college fees, Byju's, Unacademy, NESO, BITS canteen/fees
-- Cash Withdrawal/Deposit = ATM, cash
-- Bounce/Return = bounced cheque, returned payment, ECS return
+- Entertainment = Netflix, Spotify, BookMyShow, cinemas
+- Utilities = electricity, Airtel, Vodafone, recharge, broadband, gas bill
+- Medical = pharmacy, hospital, clinic, Apollo, 1mg
+- Education = school fees, Byju's, Unacademy, Neso Academy
+- Investments = Zerodha, Groww, mutual fund, SIP
+- Transfer = UPI to individual person, personal money transfer
+- Bounce/Return = bounced cheque, ECS return, mandate return
+- Gambling/High-Risk = Dream11, WazirX, Binance, poker, casino
 
-Valid categories: Salary, EMI/Loan Repayment, Rent, Utilities, Food & Grocery,
-Travel & Transport, Entertainment, Insurance, Investments, Medical, Shopping,
-Education, Cash Withdrawal/Deposit, Transfer, Bounce/Return, Gambling/High-Risk, Other
-
-Transactions:
+Transactions ({n} total):
 {batch_text}
 
-Return ONLY valid JSON: {{"0": "Food & Grocery", "1": "Transfer", ...}}
-No markdown, no explanation."""
+Return ONLY a JSON object with exactly {n} keys (0 to {n-1}):
+{{"0": "Food & Grocery", "1": "Transfer", "2": "EMI/Loan Repayment", ...}}
+Pure JSON only. No markdown. No explanation. No extra keys."""
 
     try:
         response = model.generate_content(prompt)
         text = response.text.strip()
-        if text.startswith("```"):
+        # Strip markdown fences
+        if "```" in text:
             text = re.sub(r"```[a-z]*\n?", "", text).strip().rstrip("`").strip()
+        # Extract JSON object if there's surrounding text
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            text = text[start:end]
         raw = json.loads(text)
         result: dict[int, TransactionCategory] = {}
         for k, v in raw.items():
             local_idx = int(k)
-            if local_idx < len(index_map):
+            if 0 <= local_idx < len(index_map):
                 orig_idx = index_map[local_idx]
-                try:
-                    result[orig_idx] = TransactionCategory(v)
-                except (ValueError, KeyError):
-                    result[orig_idx] = TransactionCategory.OTHER
+                result[orig_idx] = _normalize_category(str(v))
         return result
-    except Exception:
+    except Exception as e:
         return {}
