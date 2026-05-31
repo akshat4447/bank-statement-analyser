@@ -33,39 +33,54 @@ def extract_merchant(narration: str) -> str:
 
 def classify_transactions_hybrid(transactions: list[Transaction]) -> list[Transaction]:
     """
-    Classify all transactions with Gemini Flash in one batch call.
-    Extracts clean merchant names before sending — much more accurate.
+    Classify all transactions:
+    1. Tier-1: Fast regex rules for high-confidence patterns (runs always)
+    2. Tier-2: Gemini Flash for remaining unclassified transactions
+    This ensures categorization never returns all-Other even if Gemini fails.
     """
     if not transactions:
         return transactions
 
-    # Build batch with clean merchant names
-    lines = []
-    for i, txn in enumerate(transactions):
-        merchant = extract_merchant(txn.narration)
-        amt_type = "CR" if txn.credit else "DR"
-        lines.append(f"{i}|{merchant}|{amt_type}")
+    # ── Tier 1: Regex rules (deterministic, runs first) ──────────────────────
+    tier1_results = _classify_tier1(transactions)
 
-    gemini_results = _call_gemini_all(lines)
+    # Separate classified vs unclassified
+    unclassified_idxs = [i for i, cat in tier1_results.items() if cat is None]
+    classified_idxs = {i: cat for i, cat in tier1_results.items() if cat is not None}
 
+    # ── Tier 2: Gemini Flash for remaining unclassified ───────────────────────
+    gemini_results = {}
+    if unclassified_idxs:
+        lines = []
+        for i in unclassified_idxs:
+            txn = transactions[i]
+            merchant = extract_merchant(txn.narration)
+            amt_type = "CR" if txn.credit else "DR"
+            lines.append(f"{i}|{merchant}|{amt_type}")
+        gemini_results = _call_gemini_all(lines, index_map=unclassified_idxs)
+
+    # ── Apply results ─────────────────────────────────────────────────────────
     for i, txn in enumerate(transactions):
-        cat = gemini_results.get(i, TransactionCategory.OTHER)
+        cat = classified_idxs.get(i) or gemini_results.get(i) or TransactionCategory.OTHER
         txn.category = cat
         txn.is_bounce = cat == TransactionCategory.BOUNCE
         txn.is_emi = cat == TransactionCategory.EMI
-        # Salary only if it's NOT a personal name transfer
+
+        # Salary: must come from a company/employer, NOT a personal UPI transfer
         if cat == TransactionCategory.SALARY:
+            narr_lower = txn.narration.lower()
             merchant = extract_merchant(txn.narration)
-            # Personal names are usually 2 words, company names are longer/different
-            if _is_personal_name(merchant) and txn.credit:
-                txn.category = TransactionCategory.TRANSFER  # Reclassify as transfer
+            # Reject if UPI transfer from personal name
+            is_upi = "upi/" in narr_lower or "upi-" in narr_lower
+            if is_upi and _is_personal_name(merchant) and txn.credit:
+                txn.category = TransactionCategory.TRANSFER
                 txn.is_salary = False
             else:
                 txn.is_salary = True
         else:
             txn.is_salary = False
 
-    # Recurring: group by extracted merchant name, flag if 2+ times
+    # Recurring: group by merchant, flag if appears 2+ times
     merchant_counts = Counter(extract_merchant(t.narration) for t in transactions)
     for txn in transactions:
         merchant = extract_merchant(txn.narration)
@@ -75,73 +90,220 @@ def classify_transactions_hybrid(transactions: list[Transaction]) -> list[Transa
     return transactions
 
 
+# ── Known merchant keyword lookup tables ─────────────────────────────────────
+
+_FOOD_KEYWORDS = [
+    "swiggy", "zomato", "blinkit", "zepto", "amul", "cafe", "coffee",
+    "restaurant", "dominos", "pizza", "burger", "mcdonald", "kfc", "subway",
+    "dunkin", "starbucks", "chai", "biryani", "dhaba", "canteen", "mess",
+    "haldiram", "bigbasket", "grofer", "instamart", "milkbasket",
+]
+# NOTE: "canteen" intentionally kept in FOOD (it overrides EDUCATION's "bits canteen")
+# BITS college canteen is food spending, not tuition fees
+_TRAVEL_KEYWORDS = [
+    "irctc", "indigo", "spicejet", "airindia", "goair", "vistara", "akasa",
+    "ola cabs", "uber", "rapido", "redbus", "cleartrip", "makemytrip", "yatra",
+    "petrol", "fuel", "hpcl", "bpcl", "iocl", "shell", "essar",
+    "metro card", "nmmrc", "bmtc", "msrtc",
+]
+# "ola" alone removed — too short, matches "payola" or other narrations
+_SHOPPING_KEYWORDS = [
+    "amazon", "flipkart", "myntra", "ajio", "meesho", "snapdeal", "tata cliq",
+    "nykaa", "dmart", "more store", "big bazaar", "spencer",
+    "shopsy", "decathlon", "ikea",
+]
+_ENTERTAINMENT_KEYWORDS = [
+    "netflix", "spotify", "amazon prime", "hotstar", "disney", "zee5",
+    "bookmyshow", "pvr", "inox", "cinepolis", "youtube premium",
+    "gaana", "jio saavn", "apple music",
+]
+_UTILITIES_KEYWORDS = [
+    "electricity", "bescom", "msedcl", "tpddl", "bses", "cesc",
+    "airtel", "vodafone", "bsnl", "act fibernet",
+    "hathway", "tikona", "piped gas", "mahanagar gas",
+    "mobile bill", "broadband", "postpaid",
+    # "jio" alone skipped — too common in narrations unrelated to Jio services
+]
+_EMI_KEYWORDS = [
+    "emi", "nach", "ecs debit", "loan repay", "loan emi", "hdfc bank emi",
+    "icici bank emi", "axis bank emi", "kotak emi", "housing loan",
+    "car loan", "personal loan", "home loan",
+]
+_SALARY_KEYWORDS = [
+    "salary", "payroll", "stipend", "wages",
+    "salary credit", "sal cr", "monthly salary",
+    # "ctc" removed — too short, matches "irctc"
+    # "neft cr" removed — too broad; IRCTC contains "cr"
+]
+_GAMBLING_KEYWORDS = [
+    "dream11", "dream 11", "mpl game", "rummy", "poker", "casino", "winzo",
+    "adda52", "junglee", "hobigames", "my11circle", "fantasy cricket",
+    "wazirx", "binance", "coinbase", "coindcx", "zebpay", "bitbns",
+    "crypto buy", "crypto sell",
+]
+_MEDICAL_KEYWORDS = [
+    "pharmacy", "chemist", "hospital", "clinic", "apollo", "medplus",
+    "netmeds", "1mg", "pharmeasy", "doctor", "lab test", "diagnostics",
+    "medanta", "fortis", "max hospital",
+]
+_EDUCATION_KEYWORDS = [
+    "school fees", "college fees", "university fees", "tuition fee", "exam fee",
+    "byjus", "unacademy", "udemy", "coursera", "neso academy",
+    "bits pilani", "iit fees", "nit fees", "coaching fees",
+]
+_INVESTMENT_KEYWORDS = [
+    "zerodha", "groww", "upstox", "angel", "hdfc securities", "icici direct",
+    "mutual fund", "sip", "nps", "ppf", "fd booking", "rd booking",
+    "goldbees", "liquidbees",
+]
+_CASH_KEYWORDS = [
+    "atm", "cash withdrawal", "cash deposit", "cdm",
+]
+_BOUNCE_KEYWORDS = [
+    "bounce", "returned", "dishonoured", "dishonourd", "chq ret",
+    "cheque return", "ecs return", "nach return", "mandate return",
+]
+
+
+def _classify_tier1(transactions: list[Transaction]) -> dict[int, TransactionCategory | None]:
+    """
+    Fast keyword-based Tier-1 classifier.
+    Order matters: more specific rules first (e.g. SALARY before generic UPI TRANSFER).
+    Returns None for unmatched — Tier-2 (Gemini) handles those.
+    """
+    results: dict[int, TransactionCategory | None] = {}
+
+    for i, txn in enumerate(transactions):
+        narr = txn.narration.lower()
+        cat = None
+
+        if any(k in narr for k in _BOUNCE_KEYWORDS):
+            cat = TransactionCategory.BOUNCE
+        elif any(k in narr for k in _SALARY_KEYWORDS):
+            cat = TransactionCategory.SALARY
+        elif any(k in narr for k in _EMI_KEYWORDS):
+            cat = TransactionCategory.EMI
+        elif any(k in narr for k in _GAMBLING_KEYWORDS):
+            cat = TransactionCategory.GAMBLING
+        elif any(k in narr for k in _TRAVEL_KEYWORDS):
+            cat = TransactionCategory.TRAVEL
+        elif any(k in narr for k in _FOOD_KEYWORDS):
+            cat = TransactionCategory.FOOD
+        elif any(k in narr for k in _SHOPPING_KEYWORDS):
+            cat = TransactionCategory.SHOPPING
+        elif any(k in narr for k in _ENTERTAINMENT_KEYWORDS):
+            cat = TransactionCategory.ENTERTAINMENT
+        elif any(k in narr for k in _UTILITIES_KEYWORDS):
+            cat = TransactionCategory.UTILITIES
+        elif any(k in narr for k in _MEDICAL_KEYWORDS):
+            cat = TransactionCategory.MEDICAL
+        elif any(k in narr for k in _EDUCATION_KEYWORDS):
+            cat = TransactionCategory.EDUCATION
+        elif any(k in narr for k in _INVESTMENT_KEYWORDS):
+            cat = TransactionCategory.INVESTMENTS
+        elif any(k in narr for k in _CASH_KEYWORDS):
+            cat = TransactionCategory.CASH
+        elif narr.startswith("upi/") or narr.startswith("upi-"):
+            # Any UPI transaction not caught by specific rules above → Transfer
+            # This ensures ANAMIKA KU / BOBBA NAGA / generic UPI goes to Transfer, not Other
+            cat = TransactionCategory.TRANSFER
+
+        results[i] = cat
+
+    return results
+
+
 def _is_personal_name(merchant: str) -> bool:
     """
-    Heuristic: if merchant looks like a personal name (2 words, proper case),
-    it's likely a P2P transfer, not a company salary.
+    Stricter check: only flag as personal name when it's a UPI transfer
+    AND looks like a human name (2-3 words, mostly alphabetic, no company indicators).
     """
-    words = merchant.strip().split()
-    if len(words) == 2 and all(w[0].isupper() if w else False for w in words):
-        return True
-    # All caps short name like "ANAMIKA KU" or "BOBBA NAGA"
-    if len(words) <= 3 and merchant.replace(" ", "").isalpha():
-        return True
+    # Company indicators — never flag these as personal
+    company_indicators = [
+        "pvt", "ltd", "limited", "llp", "inc", "corp", "technologies",
+        "solutions", "services", "enterprises", "industries", "foundation",
+        "bank", "finance", "capital", "payments", "pay", "tech",
+    ]
+    merchant_lower = merchant.lower()
+    if any(ind in merchant_lower for ind in company_indicators):
+        return False
+
+    words = [w for w in merchant.strip().split() if w]
+    # Personal name pattern: 2-3 short words, all alphabetic
+    if 2 <= len(words) <= 3:
+        all_alpha = all(w.replace(".", "").isalpha() for w in words)
+        all_short = all(len(w) <= 12 for w in words)
+        if all_alpha and all_short:
+            return True
+
     return False
 
 
-def _call_gemini_all(lines: list[str]) -> dict[int, TransactionCategory]:
-    """Single Gemini Flash call for all transactions."""
+def _call_gemini_all(lines: list[str], index_map: list[int] | None = None) -> dict[int, TransactionCategory]:
+    """
+    Gemini Flash call for a list of transactions.
+    index_map: original transaction indices (so results map back correctly).
+    """
     import google.generativeai as genai
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return {}
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+    except Exception:
+        return {}
 
-    # Chunk if >500 transactions
-    if len(lines) > 500:
-        result = {}
-        for start in range(0, len(lines), 500):
-            chunk = lines[start:start + 500]
-            partial = _gemini_request(model, chunk, offset=start)
-            result.update(partial)
-        return result
+    # Re-index lines as 0,1,2... for the LLM; translate back using index_map
+    if index_map is None:
+        index_map = list(range(len(lines)))
 
-    return _gemini_request(model, lines, offset=0)
+    chunk_size = 400
+    result: dict[int, TransactionCategory] = {}
+
+    for chunk_start in range(0, len(lines), chunk_size):
+        chunk_lines = lines[chunk_start:chunk_start + chunk_size]
+        chunk_map = index_map[chunk_start:chunk_start + chunk_size]
+        # Re-number 0-based for the prompt
+        renumbered = [f"{j}|{'|'.join(ln.split('|')[1:])}" for j, ln in enumerate(chunk_lines)]
+        partial = _gemini_request(model, renumbered, chunk_map)
+        result.update(partial)
+
+    return result
 
 
-def _gemini_request(model, lines: list[str], offset: int = 0) -> dict[int, TransactionCategory]:
+def _gemini_request(model, lines: list[str], index_map: list[int]) -> dict[int, TransactionCategory]:
     batch_text = "\n".join(lines)
     prompt = f"""Classify each Indian bank transaction into exactly one category.
 Input format: index|merchant_name|CR(incoming money) or DR(outgoing money)
 
 Rules:
-- "Transfer" = generic P2P UPI payment to a PERSON (individual name, phone number)
-- "Salary" = ONLY if clearly from a company/employer via NEFT, never for person-to-person UPI
-- "Gambling/High-Risk" = Dream11, MPL, fantasy sports, poker, casino, crypto exchanges (WazirX, Binance, CoinDCX), Winzo, Adda52
-- Food & Grocery = Swiggy, Zomato, Blinkit, Zepto, restaurants, cafes, food shops
-- Travel & Transport = Ola, Uber, Rapido, IRCTC, airlines, petrol, fuel stations
+- Transfer = UPI payment to a PERSON (individual name, phone number)
+- Salary = ONLY from company/employer via NEFT. Never P2P UPI.
+- Gambling/High-Risk = Dream11, MPL, fantasy sports, poker, casino, WazirX, Binance, CoinDCX, Winzo, Adda52
+- Food & Grocery = Swiggy, Zomato, Blinkit, Zepto, AMUL, cafe, restaurant, dhaba, canteen
+- Travel & Transport = IRCTC, Ola, Uber, Rapido, airlines, petrol, fuel
 - Shopping = Amazon, Flipkart, Myntra, Meesho, ecommerce
-- Entertainment = Netflix, Spotify, BookMyShow, cinemas (NOT fantasy/gambling apps)
-- Utilities = electricity, water, gas, internet, mobile recharge
-- EMI/Loan Repayment = EMI, NACH, loan repayment
-- Investments = mutual fund, SIP, Zerodha, Groww, stocks (NOT crypto)
+- Entertainment = Netflix, Spotify, BookMyShow, cinemas (NOT fantasy/gambling)
+- Utilities = electricity, water, gas, internet, mobile recharge, broadband
+- EMI/Loan Repayment = EMI, NACH, ECS, loan repayment
+- Investments = mutual fund, SIP, Zerodha, Groww, stocks
 - Medical = pharmacy, hospital, clinic, medicine
-- Education = school/college fees, Byju's, Unacademy, Udemy
-- Bounce/Return = bounced cheque, returned payment
-- Other = anything unclassifiable
+- Education = school/college fees, Byju's, Unacademy, NESO, BITS canteen/fees
+- Cash Withdrawal/Deposit = ATM, cash
+- Bounce/Return = bounced cheque, returned payment, ECS return
 
-Categories: Salary, EMI/Loan Repayment, Rent, Utilities, Food & Grocery, Travel & Transport,
-Entertainment, Insurance, Investments, Medical, Shopping, Education,
-Cash Withdrawal/Deposit, Transfer, Bounce/Return, Gambling/High-Risk, Other
+Valid categories: Salary, EMI/Loan Repayment, Rent, Utilities, Food & Grocery,
+Travel & Transport, Entertainment, Insurance, Investments, Medical, Shopping,
+Education, Cash Withdrawal/Deposit, Transfer, Bounce/Return, Gambling/High-Risk, Other
 
 Transactions:
 {batch_text}
 
-Return ONLY a JSON object: {{"0": "Food & Grocery", "1": "Transfer", ...}}
-Pure JSON only, no markdown, no explanation."""
+Return ONLY valid JSON: {{"0": "Food & Grocery", "1": "Transfer", ...}}
+No markdown, no explanation."""
 
     try:
         response = model.generate_content(prompt)
@@ -149,12 +311,15 @@ Pure JSON only, no markdown, no explanation."""
         if text.startswith("```"):
             text = re.sub(r"```[a-z]*\n?", "", text).strip().rstrip("`").strip()
         raw = json.loads(text)
-        result = {}
+        result: dict[int, TransactionCategory] = {}
         for k, v in raw.items():
-            try:
-                result[int(k) + offset] = TransactionCategory(v)
-            except (ValueError, KeyError):
-                result[int(k) + offset] = TransactionCategory.OTHER
+            local_idx = int(k)
+            if local_idx < len(index_map):
+                orig_idx = index_map[local_idx]
+                try:
+                    result[orig_idx] = TransactionCategory(v)
+                except (ValueError, KeyError):
+                    result[orig_idx] = TransactionCategory.OTHER
         return result
     except Exception:
         return {}
