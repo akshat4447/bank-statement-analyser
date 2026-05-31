@@ -15,6 +15,7 @@ from models.schemas import (
     SpendingCategory, CreditworthinessMetrics, RiskFlag, TransactionCategory,
     MerchantSpend, IncomeSource, UnderwriterRecommendation, StatementQuality,
 )
+from services.transaction_classifier import extract_merchant
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
@@ -454,6 +455,20 @@ def run_analytics(
         overall_quality_score=quality_score,
         grade=quality_grade,
     )
+
+    # ── Recurring transaction detection ───────────────────────────────────────
+    # 🟠 Bug #9 Fix: Detect merchants appearing 2+ times
+    from services.recurring_detector import detect_recurring_transactions
+    recurring_merchants = detect_recurring_transactions(transactions)
+
+    # Mark transactions as recurring if they belong to a recurring merchant
+    recurring_merchant_names = {r.merchant for r in recurring_merchants}
+    for t in transactions:
+        merchant = extract_merchant(t.narration)
+        if merchant in recurring_merchant_names:
+            t.is_recurring = True
+
+    recurring_txns = [t for t in transactions if t.is_recurring]
 
     # ── Underwriter recommendation ────────────────────────────────────────────
     underwriter = _generate_underwriter_rec(
