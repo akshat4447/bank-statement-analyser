@@ -326,7 +326,7 @@ def run_analytics(
     actual_period_to = df["date"].max().strftime("%Y-%m-%d") if not df.empty else None
 
     # ── Spending breakdown (exclude Transfer for meaningful donut) ────────────
-    from services.transaction_classifier import extract_merchant
+    # extract_merchant already imported at module top level
     expense_df = df[df["debit"] > 0].copy()
     # Don't count pure transfers in spending breakdown — use all categories
     category_groups = expense_df.groupby("category")["debit"].agg(["sum", "count"])

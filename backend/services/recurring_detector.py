@@ -27,7 +27,6 @@ def detect_recurring_transactions(transactions: List[Transaction]) -> List[Merch
     recurring = []
     for merchant, data in merchant_data.items():
         if data["count"] >= 2:
-            avg_amount = data["total"] / data["count"]
             recurring.append(MerchantSpend(
                 merchant=merchant,
                 amount=round(data["total"], 2),

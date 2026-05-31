@@ -84,7 +84,19 @@ def generate_pdf_report(analysis: AnalysisResponse, output_path: str) -> str:
         # Get closing balance from last transaction (NOT PDF header)
         last_txn_balance = "—"
         if analysis.transactions:
-            sorted_txns = sorted(analysis.transactions, key=lambda x: x.date if isinstance(x.date, str) else str(x.date))
+            # Parse dates properly to handle all formats (ISO, dd/mm/yyyy, etc.)
+            _DATE_FMTS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d %b %Y", "%d/%m/%y")
+            _DT_MIN = datetime.min
+
+            def _safe_parse(d: str):
+                for fmt in _DATE_FMTS:
+                    try:
+                        return datetime.strptime(d.strip(), fmt)
+                    except ValueError:
+                        continue
+                return _DT_MIN  # unparseable → sort to beginning
+
+            sorted_txns = sorted(analysis.transactions, key=lambda x: _safe_parse(x.date))
             if sorted_txns and sorted_txns[-1].balance is not None:
                 last_txn_balance = f"₹{sorted_txns[-1].balance:,.2f}"
             else:
